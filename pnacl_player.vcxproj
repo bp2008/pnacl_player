@@ -94,9 +94,6 @@
   <ItemDefinitionGroup>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <Text Include="readme.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="DecodedFrame.cpp" />
     <ClCompile Include="Decoder.cpp" />
     <ClCompile Include="main.cc" />
