@@ -1,6 +1,8 @@
 # pnacl_player
 H.264 video player using Chrome's portable native client (pluginless native code in Chrome)
 
+This project is a refactored and extended version of the video_decode example project from the Google Native Client SDK.
+
 ## Building
 
 To build this project:
