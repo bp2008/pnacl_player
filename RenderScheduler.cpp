@@ -5,6 +5,7 @@ namespace PnaclPlayer
 {
 	void RenderScheduler::PrintSchedulerStatus(DecodedFrame* frame, std::string message)
 	{
+#ifdef DebugLogging
 		std::stringstream sstm;
 		sstm << "{ ";
 		sstm << "playbackClockStart: " << playbackClockStart << ", ";
@@ -22,6 +23,7 @@ namespace PnaclPlayer
 		sstm << ",    " << message << " ";
 		sstm << "}";
 		instance_->PostString(sstm.str());
+#endif
 	}
 	/// <summary>
 	/// Returns the time in milliseconds similar to performance.now() in the browser, but related to no particular epoch.
@@ -68,7 +70,7 @@ namespace PnaclPlayer
 		playbackClockOffset = 0;
 		playbackClockStart = perfNow();
 		while (frameQueue.size() > 0)
-			instance_->frameDropFunc(DequeueOldest());
+			instance_->frameDropFunc(DequeueOldest(), false);
 	}
 	void RenderScheduler::DelayedPaint(int32_t result)
 	{

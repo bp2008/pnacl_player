@@ -100,12 +100,17 @@ namespace PnaclPlayer
 #pragma endregion
 
 		void frameRenderFunc(DecodedFrame* frame);
-		void frameDropFunc(DecodedFrame* frame);
+		void frameDropFunc(DecodedFrame* frame, bool reportToClient);
 
 		/// <summary>
 		/// Send a string to the browser
 		/// </summary>
 		void PostString(std::string message);
+
+		/// <summary>
+		/// Send a string to the browser only if DebugLogging is defined.
+		/// </summary>
+		void DebugLog(std::string message);
 
 		/// <summary>
 		/// Returns the time in milliseconds similar to performance.now() in the browser, but related to no particular epoch.
@@ -144,6 +149,7 @@ namespace PnaclPlayer
 		pp::Size plugin_size_;
 		bool is_painting_;
 		int hwaccel_;
+		bool is_resetting_;
 		// Pictures go into this queue when they are received from the scheduler.
 		std::vector<DecodedFrame*> pendingPictures;
 		// The currently rendering picture goes into this object.

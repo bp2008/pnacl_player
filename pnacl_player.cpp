@@ -7,7 +7,7 @@
 namespace PnaclPlayer
 {
 
-	pnacl_player::pnacl_player(PP_Instance instance, pp::Module* module) : pp::Instance(instance), pp::Graphics3DClient(this), callback_factory_(this), is_painting_(false), hwaccel_(0), context_(NULL), nextFrameTimestamp(0)
+	pnacl_player::pnacl_player(PP_Instance instance, pp::Module* module) : pp::Instance(instance), pp::Graphics3DClient(this), callback_factory_(this), is_painting_(false), hwaccel_(0), is_resetting_(false), context_(NULL), nextFrameTimestamp(0)
 	{
 		console_if_ = static_cast<const PPB_Console*>(pp::Module::Get()->GetBrowserInterface(PPB_CONSOLE_INTERFACE));
 		core_if_ = static_cast<const PPB_Core*>(pp::Module::Get()->GetBrowserInterface(PPB_CORE_INTERFACE));
@@ -83,34 +83,42 @@ namespace PnaclPlayer
 	void pnacl_player::ReceiveDecodedPicture(DecodedFrame* frame)
 	{
 		// The frame is now the responsibility of the renderScheduler until it is handed back to us.
+#ifdef DebugLogging
 		{
 			std::stringstream sstm;
 			sstm << "decoded frame " << frame->timestamp;
-			PostString(sstm.str());
+			DebugLog(sstm.str());
 		}
+#endif
 		renderScheduler->AddFrame(frame);
 	}
 	void pnacl_player::frameRenderFunc(DecodedFrame* frame)
 	{
+
+#ifdef DebugLogging
 		{
 			std::stringstream sstm;
 			sstm << "frameRenderFunc() " << frame->timestamp;
-			PostString(sstm.str());
+			DebugLog(sstm.str());
 		}
+#endif
 		// The frame is now our responsibility.
 		PaintPicture(frame);
 	}
-	void pnacl_player::frameDropFunc(DecodedFrame* frame)
+	void pnacl_player::frameDropFunc(DecodedFrame* frame, bool reportToClient)
 	{
 		// The frame is now our responsibility.
-		std::stringstream sstm;
-		sstm << "df {" // dropped frame
-			<< "\"w\":" << frame->picture.texture_size.width
-			<< ",\"h\":" << frame->picture.texture_size.height
-			<< ",\"t\":" << frame->timestamp
-			<< ",\"i\":" << frame->expectedInterframe
-			<< " }";
-		PostString(sstm.str());
+		if (!is_resetting_ && reportToClient)
+		{
+			std::stringstream sstm;
+			sstm << "df {" // dropped frame
+				<< "\"w\":" << frame->picture.texture_size.width
+				<< ",\"h\":" << frame->picture.texture_size.height
+				<< ",\"t\":" << frame->timestamp
+				<< ",\"i\":" << frame->expectedInterframe
+				<< " }";
+			PostString(sstm.str());
+		}
 		frame->RecyclePicture();
 		delete frame;
 	}
@@ -119,25 +127,27 @@ namespace PnaclPlayer
 	{
 		if (frame->streamNum != frame->decoder->currentStreamNum)
 		{
-			frameDropFunc(frame);
+			frameDropFunc(frame, false);
 			return;
 		}
 
 		// Enqueue up to N pictures for painting.  Drop the oldest picture if necessary.
-		int N = 15;
+		int N = 8;
 		if (pendingPictures.size() >= N)
 		{
 			DecodedFrame* tmp = pendingPictures.front();
-			frameDropFunc(tmp);
+			frameDropFunc(tmp, true);
 			pendingPictures.erase(pendingPictures.begin());
 		}
 		pendingPictures.push_back(frame);
 
+#ifdef DebugLogging
 		{
 			std::stringstream sstm;
 			sstm << "pendingPictures.size() == " << pendingPictures.size();
-			PostString(sstm.str());
+			DebugLog(sstm.str());
 		}
+#endif
 
 		if (!is_painting_)
 			PaintNextPicture();
@@ -155,7 +165,7 @@ namespace PnaclPlayer
 		// A frame may have already been recycled or may belong to an older stream, so we should check that here.
 		if (next->recycled || next->streamNum != video_decoder_->currentStreamNum)
 		{
-			frameDropFunc(next);
+			frameDropFunc(next, false);
 			next = currentlyRenderingFrame = NULL;
 			PaintNextPicture();
 			return;
@@ -177,11 +187,13 @@ namespace PnaclPlayer
 			context_->ResizeBuffers(plugin_size_.width(), plugin_size_.height());
 		}
 
+#ifdef DebugLogging
 		{
 			std::stringstream sstm;
 			sstm << "Painting " << next->timestamp;
-			PostString(sstm.str());
+			DebugLog(sstm.str());
 		}
+#endif
 
 		renderScheduler->lastRenderStarted = perfNow();
 
@@ -220,20 +232,24 @@ namespace PnaclPlayer
 
 		gles2_if_->UseProgram(graphics_3d, 0);
 
+#ifdef DebugLogging
 		{
 			std::stringstream sstm;
 			sstm << "SwapBuffers() " << next->timestamp;
-			PostString(sstm.str());
+			DebugLog(sstm.str());
 		}
+#endif
 		context_->SwapBuffers(callback_factory_.NewCallback(&pnacl_player::PaintFinished));
 	}
 
 	void pnacl_player::PaintFinished(int32_t result)
 	{
 		{
+#ifdef DebugLogging
 			std::stringstream sstm;
 			sstm << "PaintFinished() " << result;
-			PostString(sstm.str());
+			DebugLog(sstm.str());
+#endif
 		}
 		assert(result == PP_OK);
 		renderScheduler->lastRenderDuration = perfNow() - renderScheduler->lastRenderStarted;
@@ -242,6 +258,7 @@ namespace PnaclPlayer
 		DecodedFrame* last = currentlyRenderingFrame;
 		last->rendering = false;
 
+		if(!is_resetting_)
 		{
 			std::stringstream sstm;
 			sstm << "rf {" // Rendered frame
@@ -276,11 +293,13 @@ namespace PnaclPlayer
 			{
 				if (video_decoder_)
 				{
-					PostString("Reset starting");
+					is_resetting_ = true;
+					//DebugLog("Reset starting");
 					video_decoder_->Reset();
-					PostString("Reset mid");
+					//DebugLog("Reset mid");
 					renderScheduler->Reset();
-					PostString("Reset complete");
+					is_resetting_ = false;
+					//DebugLog("Reset complete");
 				}
 				else
 					PostString("not yet ready!");
@@ -293,9 +312,11 @@ namespace PnaclPlayer
 			if (video_decoder_)
 			{
 				pp::VarArrayBuffer buffer(var_message);
+#ifdef DebugLogging
 				std::stringstream sstr;
 				sstr << "Received frame " << nextFrameTimestamp;
-				PostString(sstr.str());
+				DebugLog(sstr.str());
+#endif
 				video_decoder_->ReceiveFrame(EncodedFrame(buffer, nextFrameTimestamp));
 			}
 			else
@@ -307,6 +328,13 @@ namespace PnaclPlayer
 	{
 		pp::Var var_message = pp::Var(message);
 		PostMessage(var_message);
+	}
+	void pnacl_player::DebugLog(std::string message)
+	{
+#ifdef DebugLogging
+		pp::Var var_message = pp::Var(message);
+		PostMessage(var_message);
+#endif
 	}
 
 #pragma region Low-Level Rendering
