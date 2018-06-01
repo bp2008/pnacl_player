@@ -3,10 +3,8 @@
 
 namespace PnaclPlayer
 {
-	Decoder::Decoder(pnacl_player* instance, int id, const pp::Graphics3D& graphics_3d, int hwaccel) : instance_(instance), id_(id), ppDecoder(new pp::VideoDecoder(instance)), callback_factory_(this), next_picture_id_(0), flushing_(false), resetting_(false), initializing_(true), decode_looping_(false), total_latency_(0.0), num_pictures_(0), currentStreamNum(0)
+	Decoder::Decoder(pnacl_player* instance, int id, const pp::Graphics3D& graphics_3d, int hwaccel) : currentStreamNum(0), instance_(instance), id_(id), ppDecoder(new pp::VideoDecoder(instance)), callback_factory_(this), next_picture_id_(0), flushing_(false), resetting_(false), initializing_(true), decode_looping_(false)
 	{
-		core_if_ = static_cast<const PPB_Core*>(pp::Module::Get()->GetBrowserInterface(PPB_CORE_INTERFACE));
-
 		const PP_VideoProfile kBitstreamProfile = PP_VIDEOPROFILE_H264HIGH;
 
 		assert(!ppDecoder->is_null());
@@ -52,7 +50,7 @@ namespace PnaclPlayer
 
 		// Start the decode loop.
 		if (initializing_)
-			instance_->PostString("initialized");
+			instance_->PostString("decoder initialized");
 		initializing_ = false;
 		DecodeNextFrame();
 	}
@@ -63,7 +61,11 @@ namespace PnaclPlayer
 		if (resetting_ || initializing_)
 			return;
 		resetting_ = true;
-		while (DeleteFirstFrameInQueue());
+		currentStreamNum++;
+		while (!encodedFrameQueue.empty())
+			encodedFrameQueue.pop();
+		next_picture_id_ = 0;
+		timestampMap.clear();
 		ppDecoder->Reset(callback_factory_.NewCallback(&Decoder::ResetDone));
 	}
 
@@ -83,9 +85,11 @@ namespace PnaclPlayer
 		ppDecoder->RecyclePicture(picture);
 	}
 
-	void Decoder::ReceiveFrame(pp::VarArrayBuffer& buffer, long long timestamp)
+	void Decoder::ReceiveFrame(EncodedFrame frame)
 	{
-		encodedFrameQueue.push(EncodedFrame(buffer, timestamp));
+		frame.id = next_picture_id_++;
+		encodedFrameQueue.push(frame);
+		timestampMap[frame.id] = frame.timestamp;
 		if (!resetting_ && !flushing_ && !initializing_ && !decode_looping_)
 			DecodeNextFrame();
 	}
@@ -109,10 +113,9 @@ namespace PnaclPlayer
 		decode_looping_ = true;
 
 		// Decode the frame. On completion, DecodeDone will call DecodeNextFrame to implement a decode loop.
-		currentlyDecodingFrame = encodedFrameQueue.front();
+		EncodedFrame frame = encodedFrameQueue.front();
 		encodedFrameQueue.pop();
-		decode_time_[next_picture_id_ % kMaxDecodeDelay] = core_if_->GetTimeTicks();
-		ppDecoder->Decode(next_picture_id_++, currentlyDecodingFrame.buffer.ByteLength(), currentlyDecodingFrame.buffer.Map(), callback_factory_.NewCallback(&Decoder::DecodeDone));
+		ppDecoder->Decode(frame.id, frame.buffer.ByteLength(), frame.buffer.Map(), callback_factory_.NewCallback(&Decoder::DecodeDone));
 	}
 
 	void Decoder::DecodeDone(int32_t result)
@@ -133,18 +136,14 @@ namespace PnaclPlayer
 	void Decoder::PictureReady(int32_t result, PP_VideoPicture picture)
 	{
 		assert(ppDecoder);
-		// Break out of the get picture loop on abort.
 		if (result == PP_ERROR_ABORTED)
-			return;
+			return; // Break out of the get picture loop on abort.
 		assert(result == PP_OK);
-		num_pictures_++;
-		PP_TimeTicks currentTime = core_if_->GetTimeTicks();
-		PP_TimeTicks latency = currentTime - decode_time_[picture.decode_id % kMaxDecodeDelay];
-		total_latency_ += latency;
 
 		ppDecoder->GetPicture(callback_factory_.NewCallbackWithOutput(&Decoder::PictureReady));
 
-		instance_->ReceiveDecodedPicture(DecodedFrame(this, picture, currentStreamNum, 0));
+		int64_t timestamp = timestampMap[picture.decode_id];
+		instance_->ReceiveDecodedPicture(new DecodedFrame(this, picture, currentStreamNum, timestamp));
 	}
 
 	void Decoder::FlushDone(int32_t result)

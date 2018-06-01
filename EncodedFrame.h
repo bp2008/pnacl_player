@@ -5,9 +5,10 @@ namespace PnaclPlayer
 	struct EncodedFrame
 	{
 		EncodedFrame() : buffer(pp::VarArrayBuffer()), timestamp(0) {}
-		EncodedFrame(pp::VarArrayBuffer& buffer, long long timestamp) : buffer(buffer), timestamp(timestamp) {}
+		EncodedFrame(pp::VarArrayBuffer& buffer, int64_t timestamp) : buffer(buffer), timestamp(timestamp), id(0) {}
 		~EncodedFrame() {}
 		pp::VarArrayBuffer buffer;
-		long long timestamp;
+		int64_t timestamp;
+		int32_t id;
 	};
 }

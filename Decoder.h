@@ -3,6 +3,7 @@
 #include "DecodedFrame.h"
 
 #include <queue>
+#include <map>
 
 #include "ppapi/cpp/graphics_3d.h"
 #include "ppapi/cpp/video_decoder.h"
@@ -31,23 +32,15 @@ namespace PnaclPlayer
 		/// The queue of frames that have not yet been decoded.
 		/// </summary>
 		std::queue<EncodedFrame> encodedFrameQueue;
+		/// <summary>
+		/// The queue of frames that have not yet been decoded.
+		/// </summary>
+		std::map<int32_t, int64_t> timestampMap;
 
 		/// <summary>
-		/// The currently decoding frame.
+		/// The current stream number.  Incremented with each Reset() call.
 		/// </summary>
-		EncodedFrame currentlyDecodingFrame;
-
-		/// <summary>
-		/// If there is a frame in the queue, deallocates the frame and pops it from the queue before returning true.  If the queue is empty, returns false.
-		/// </summary>
-		bool DeleteFirstFrameInQueue()
-		{
-			if (encodedFrameQueue.empty())
-				return false;
-			EncodedFrame ef = encodedFrameQueue.front();
-			encodedFrameQueue.pop();
-			return true;
-		}
+		int32_t currentStreamNum;
 
 		/// <summary>
 		/// Clears the queue of frames that have not yet been decoded, and begins asynchronously resetting the decoder.  It is safe to begin sending new frames to the decoder immediately after this method returns.
@@ -58,18 +51,9 @@ namespace PnaclPlayer
 		/// </summary>
 		void RecyclePicture(const PP_VideoPicture& picture);
 		/// <summary>
-		/// Call this when the browser sends an ArrayBuffer containing video data.
+		/// Call this when the browser sends an ArrayBuffer containing video data.  The decoder is responsible for deleting the EncodedFrame when it is no longer needed.
 		/// </summary>
-		void ReceiveFrame(pp::VarArrayBuffer& buffer, long long timestamp);
-
-		/// <summary>
-		/// Returns the average latency of this decoder, in microseconds (1000 microseconds = 1 millisecond).
-		/// </summary>
-		PP_TimeTicks GetAverageLatency()
-		{
-			return num_pictures_ ? total_latency_ / num_pictures_ : 0;
-		}
-
+		void ReceiveFrame(EncodedFrame frame);
 	private:
 		void InitializeDone(int32_t result);
 		void Start();
@@ -90,12 +74,5 @@ namespace PnaclPlayer
 		bool resetting_;
 		bool initializing_;
 		bool decode_looping_;
-
-		const PPB_Core* core_if_;
-		static const int kMaxDecodeDelay = 128;
-		PP_TimeTicks decode_time_[kMaxDecodeDelay];
-		PP_TimeTicks total_latency_;
-		int num_pictures_;
-		int32_t currentStreamNum;
 	};
 }

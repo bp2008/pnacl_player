@@ -98,6 +98,7 @@
     <ClCompile Include="Decoder.cpp" />
     <ClCompile Include="main.cc" />
     <ClCompile Include="pnacl_player.cpp" />
+    <ClCompile Include="RenderScheduler.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="LICENSE" />
@@ -111,6 +112,7 @@
     <ClInclude Include="EncodedFrame.h" />
     <ClInclude Include="pnacl_player.h" />
     <ClInclude Include="pnacl_player_assert.h" />
+    <ClInclude Include="RenderScheduler.h" />
     <ClInclude Include="Shader.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

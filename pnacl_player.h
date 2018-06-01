@@ -2,6 +2,7 @@
 #include "Shader.h"
 #include "Decoder.h"
 #include "DecodedFrame.h"
+#include "RenderScheduler.h"
 
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
@@ -43,18 +44,36 @@ namespace PnaclPlayer
 			// Probably have to recreate the decoder from scratch, because old textures can still be outstanding in the decoder!
 			assert(false && "Unexpectedly lost graphics context");
 		}
-		void ReceiveDecodedPicture(DecodedFrame frame);
+		void ReceiveDecodedPicture(DecodedFrame* frame);
 
-		void DelayedPaint(int32_t result, DecodedFrame frame);
-
-		void PaintPicture(DecodedFrame frame);
-
+		void PaintPicture(DecodedFrame* frame);
 		/// <summary>
 		/// Handler for messages coming in from the browser via postMessage().  The argument "var_message" can be any pp:Var type; for example int, string, Array, or Dictionary. Please see the pp:Var documentation for more details.
 		/// </summary>
 		/// <param name="var_message">The message posted by the browser.</param>
 		virtual void HandleMessage(const pp::Var& var_message);
 
+#pragma region Info Logging
+		// Log a message to the developer console and stdout by creating a temporary
+		// object of this type and streaming to it.  Example usage:
+		// LogInfo(this).s() << "Hello world: " << 42;
+		class LogInfo
+		{
+		public:
+			LogInfo(pnacl_player* instance) : instance_(instance) {}
+			~LogInfo()
+			{
+				const std::string& msg = stream_.str();
+				instance_->console_if_->Log(instance_->pp_instance(), PP_LOGLEVEL_LOG, pp::Var(msg).pp_var());
+				std::cout << msg << std::endl;
+			}
+			std::ostringstream& s() { return stream_; }
+
+		private:
+			pnacl_player * instance_;
+			std::ostringstream stream_;
+		};
+#pragma endregion
 #pragma region Error Logging
 		// Log an error to the developer console and stderr by creating a temporary
 		// object of this type and streaming to it.  Example usage:
@@ -75,16 +94,35 @@ namespace PnaclPlayer
 			std::ostringstream& s() { return stream_; }
 
 		private:
-			pnacl_player* instance_;
+			pnacl_player * instance_;
 			std::ostringstream stream_;
 		};
 #pragma endregion
+
+		void frameRenderFunc(DecodedFrame* frame);
+		void frameDropFunc(DecodedFrame* frame);
 
 		/// <summary>
 		/// Send a string to the browser
 		/// </summary>
 		void PostString(std::string message);
 
+		/// <summary>
+		/// Returns the time in milliseconds similar to performance.now() in the browser, but related to no particular epoch.
+		/// </summary>
+		int64_t perfNow()
+		{
+			return (int64_t)(core_if_->GetTimeTicks() * 1000);
+		}
+
+		void DelayedPaint(int32_t result)
+		{
+			renderScheduler->DelayedPaint(result);
+		}
+		void CallDelayedPaintAfterDelay(int32_t delay_in_milliseconds, int32_t result)
+		{
+			core_if_->CallOnMainThread(delay_in_milliseconds, callback_factory_.NewCallback(&pnacl_player::DelayedPaint).pp_completion_callback(), result);
+		}
 	private:
 
 		void InitializeDecoders();
@@ -101,17 +139,15 @@ namespace PnaclPlayer
 		void PaintFinished(int32_t result);
 #pragma endregion
 
+		pp::CompletionCallbackFactory<pnacl_player> callback_factory_;
+
 		pp::Size plugin_size_;
 		bool is_painting_;
 		int hwaccel_;
-		// When decode outpaces render, we queue up decoded pictures for later painting.
-		std::queue<DecodedFrame> pending_pictures_;
-
-		int num_frames_rendered_;
-		PP_TimeTicks first_frame_delivered_ticks_;
-		PP_TimeTicks last_swap_request_ticks_;
-		PP_TimeTicks swap_ticks_;
-		pp::CompletionCallbackFactory<pnacl_player> callback_factory_;
+		// Pictures go into this queue when they are received from the scheduler.
+		std::vector<DecodedFrame*> pendingPictures;
+		// The currently rendering picture goes into this object.
+		DecodedFrame* currentlyRenderingFrame;
 
 		// Unowned pointers.
 		const PPB_Console* console_if_;
@@ -124,7 +160,8 @@ namespace PnaclPlayer
 		/// </summary>
 		pp::Graphics3D* context_;
 		Decoder* video_decoder_;
-		long long nextFrameTimestamp;
+		RenderScheduler* renderScheduler;
+		int64_t nextFrameTimestamp;
 
 #pragma region Shader Stuff
 		// Shader program to draw GL_TEXTURE_2D target.
