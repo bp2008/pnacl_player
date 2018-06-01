@@ -19,9 +19,8 @@ To build this project:
 3) Build by running "make.bat" in this project folder.  The VS solution is also wired up so you can use the BUILD menu in Visual Studio (created and tested in VS 2017 Community Edition).
 4) Finalized, compressed output appears in the FinishedOutput subdirectory.
 
-## Planned Features
+## (Un)Planned Features
 
-* Proper frame timing, rather than decoding and rendering frames with no delay.  Some of the foundation is in place for this already.
 * Audio playback of some sort.
 
 ## Example Implementation
