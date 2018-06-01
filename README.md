@@ -3,6 +3,12 @@ H.264 video player using Chrome's portable native client (pluginless native code
 
 This project is a refactored and extended version of the video_decode example project from the Google Native Client SDK.
 
+## ON HOLD INDEFINITELY
+
+PNaCl was deprecated one week after I started this project, and I did not find out until this morning, 4 months later.  In early 2018, PNaCl applications won't work outside of a full-blown browser extension.  https://blog.chromium.org/2017/05/goodbye-pnacl-hello-webassembly.html
+
+This may still work if I build it as a Chrome extension, but I'm now unreasonably confident that one week after I get it working, Google will announce the end of PNaCl in Chrome extensions.
+
 ## Building
 
 To build this project:
