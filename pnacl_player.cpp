@@ -174,17 +174,19 @@ namespace PnaclPlayer
 		is_painting_ = true;
 		next->rendering = true;
 
-		if (plugin_size_.width() != next->picture.texture_size.width || plugin_size_.height() != next->picture.texture_size.height)
+		int32_t w = next->picture.texture_size.width;
+		int32_t h = next->picture.texture_size.height;
+		if (plugin_size_.width() != w || plugin_size_.height() != h)
 		{
 			// This frame size is different from the last one.
-			plugin_size_.SetSize(next->picture.texture_size.width, next->picture.texture_size.height);
+			plugin_size_.SetSize(w, h);
+			context_->ResizeBuffers(w, h);
 			std::stringstream sstm;
 			sstm << "vr {" // Viewport resized
-				<< "\"w\":" << plugin_size_.width()
-				<< ",\"h\":" << plugin_size_.height()
+				<< "\"w\":" << w
+				<< ",\"h\":" << h
 				<< " }";
 			PostString(sstm.str());
-			context_->ResizeBuffers(plugin_size_.width(), plugin_size_.height());
 		}
 
 #ifdef DebugLogging
@@ -201,8 +203,6 @@ namespace PnaclPlayer
 
 		int x = 0;
 		int y = 0;
-		int w = plugin_size_.width();
-		int h = plugin_size_.height();
 
 		PP_Resource graphics_3d = context_->pp_resource();
 		if (picture.texture_target == GL_TEXTURE_2D)
@@ -258,7 +258,7 @@ namespace PnaclPlayer
 		DecodedFrame* last = currentlyRenderingFrame;
 		last->rendering = false;
 
-		if(!is_resetting_)
+		if (!is_resetting_)
 		{
 			std::stringstream sstm;
 			sstm << "rf {" // Rendered frame
